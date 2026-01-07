@@ -1,13 +1,13 @@
 {
-  "name": "react-typescript",
+  "name": "stacks-transaction-signing-demo",
   "version": "1.0.0",
-  "description": "React and TypeScript example starter project",
-  "keywords": [
-    "typescript",
-    "react",
-    "starter"
-  ],
-  "main": "src/index.tsx",
+  "description": "Stacks transaction signing with software and Ledger wallets",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "@ledgerhq/hw-transport-webusb": "6.29.4",
     "@scure/bip32": "1.3.3",
@@ -15,31 +15,17 @@
     "@stacks/encryption": "^7.3.1",
     "@stacks/transactions": "7.3.0",
     "@zondax/ledger-stacks": "1.1.0",
-    "add": "^2.0.6",
     "buffer": "^6.0.3",
-    "loader-utils": "3.2.1",
     "process": "^0.11.10",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "react-scripts": "5.0.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
-    "@types/react": "18.2.38",
-    "@types/react-dom": "18.2.15",
-    "playwright": "^1.57.0",
-    "typescript": "4.4.4"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
-  },
-  "browserslist": [
-    ">0.2%",
-    "not dead",
-    "not ie <= 11",
-    "not op_mini all"
-  ]
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
 }
