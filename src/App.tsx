@@ -28,6 +28,7 @@ export default function App() {
   const [walletType, setWalletType] = useState<WalletType>("software");
   const [mnemonic, setMnemonic] = useState("");
   const [result, setResult] = useState<string>("");
+  const [sponsored, setSponsored] = useState(true);
 
   const verifySigHash = useCallback(({ txHex }: { txHex: string }) => {
     try {
@@ -100,7 +101,7 @@ export default function App() {
 
       // Create unsigned transaction
       const contractCall = await makeUnsignedContractCall({
-        sponsored: true,
+        sponsored,
         contractAddress: "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE",
         contractName: "send-many",
         functionName: "send-many",
@@ -116,9 +117,12 @@ export default function App() {
       const signedTxHex = signedTx.serialize();
 
       // Extract the signature from the signed transaction
-      const spendingCondition = signedTx.auth.spendingCondition as SingleSigSpendingCondition;
+      const spendingCondition = signedTx.auth
+        .spendingCondition as SingleSigSpendingCondition;
       const signatureVRS = spendingCondition.signature?.data;
-      const signatureVRSHex = signatureVRS ? Buffer.from(signatureVRS).toString("hex") : "N/A";
+      const signatureVRSHex = signatureVRS
+        ? Buffer.from(signatureVRS).toString("hex")
+        : "N/A";
 
       console.log("Signed transaction hex:", signedTxHex);
       console.log("SignatureVRS (software):", signatureVRSHex);
@@ -145,7 +149,7 @@ export default function App() {
         error: `Software wallet error: ${String(error)}`,
       });
     }
-  }, [mnemonic, verifySigHash]);
+  }, [mnemonic, sponsored, verifySigHash]);
 
   const handleLedgerSign = useCallback(async () => {
     try {
@@ -182,7 +186,7 @@ export default function App() {
 
       // Create unsigned transaction
       const contractCall = await makeUnsignedContractCall({
-        sponsored: true,
+        sponsored,
         contractAddress: "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE",
         contractName: "send-many",
         functionName: "send-many",
@@ -246,7 +250,7 @@ export default function App() {
         error: `Ledger error: ${String(error)}`,
       });
     }
-  }, [verifySigHash]);
+  }, [sponsored, verifySigHash]);
 
   const handleGenerateMnemonic = useCallback(() => {
     const newMnemonic = generateMnemonic(wordlist, 256); // 24 words
@@ -255,7 +259,15 @@ export default function App() {
 
   return (
     <div className="App" style={{ padding: "20px", fontFamily: "monospace" }}>
-      <h1>Stacks Transaction Signing Demo</h1>
+      <h1>Ledger Stacks Sponsored transaction signing issue demo</h1>
+
+      <a
+        href="https://github.com/Zondax/ledger-stacks/issues/205"
+        target="_blank"
+        rel="noreferrer"
+      >
+        View Related GitHub Issue on zondax/ledger-stacks
+      </a>
 
       <div style={{ marginBottom: "20px" }}>
         <h2>Select Wallet Type</h2>
@@ -277,6 +289,29 @@ export default function App() {
             onChange={(e) => setWalletType(e.target.value as WalletType)}
           />
           Ledger Hardware Wallet
+        </label>
+      </div>
+
+      <div style={{ marginBottom: "20px" }}>
+        <h2>Transaction Type</h2>
+        <label>
+          <input
+            type="radio"
+            value="sponsored"
+            checked={sponsored === true}
+            onChange={() => setSponsored(true)}
+          />
+          Sponsored Transaction
+        </label>
+        <br />
+        <label>
+          <input
+            type="radio"
+            value="non-sponsored"
+            checked={sponsored === false}
+            onChange={() => setSponsored(false)}
+          />
+          Non-Sponsored Transaction
         </label>
       </div>
 
@@ -343,7 +378,16 @@ export default function App() {
           }}
         >
           <h3 style={{ color: "#2e7d32", margin: "0 0 10px 0" }}>Result</h3>
-          <pre style={{ margin: 0, overflow: "auto" }}>{result}</pre>
+          <pre
+            style={{
+              margin: 0,
+              overflow: "auto",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+            }}
+          >
+            {result}
+          </pre>
         </div>
       )}
     </div>
