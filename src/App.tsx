@@ -20,6 +20,14 @@ import { getPublicKeyFromPrivate } from "@stacks/encryption";
 
 type WalletType = "software" | "ledger";
 
+interface HistoryItem {
+  timestamp: string;
+  walletType: WalletType;
+  sponsored: boolean;
+  data: Record<string, any>;
+  verified: boolean;
+}
+
 export default function App() {
   const [error, setError] = useState({
     isError: false,
@@ -27,8 +35,25 @@ export default function App() {
   });
   const [walletType, setWalletType] = useState<WalletType>("software");
   const [mnemonic, setMnemonic] = useState("");
-  const [result, setResult] = useState<string>("");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [sponsored, setSponsored] = useState(true);
+
+  // Helper to create identical unsigned transactions
+  const createUnsignedTransaction = useCallback(
+    async (publicKey: string) => {
+      return await makeUnsignedContractCall({
+        sponsored,
+        contractAddress: "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE",
+        contractName: "send-many",
+        functionName: "send-many",
+        functionArgs: [],
+        publicKey,
+        nonce: 220, // Fixed nonce for consistent transaction
+        fee: 52259, // Fixed fee (0xcc23) for consistent transaction
+      });
+    },
+    [sponsored]
+  );
 
   const verifySigHash = useCallback(({ txHex }: { txHex: string }) => {
     try {
@@ -73,7 +98,6 @@ export default function App() {
     }
 
     try {
-      setResult("");
       setError({ isError: false, error: "" });
 
       // Validate mnemonic
@@ -99,15 +123,8 @@ export default function App() {
 
       console.log("Public key:", publicKey);
 
-      // Create unsigned transaction
-      const contractCall = await makeUnsignedContractCall({
-        sponsored,
-        contractAddress: "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE",
-        contractName: "send-many",
-        functionName: "send-many",
-        functionArgs: [],
-        publicKey,
-      });
+      // Create unsigned transaction using shared helper
+      const contractCall = await createUnsignedTransaction(publicKey);
 
       // Sign the transaction
       const signer = new TransactionSigner(contractCall);
@@ -116,32 +133,45 @@ export default function App() {
       const signedTx = signer.transaction;
       const signedTxHex = signedTx.serialize();
 
-      // Extract the signature from the signed transaction
-      const spendingCondition = signedTx.auth
-        .spendingCondition as SingleSigSpendingCondition;
-      const signatureVRS = spendingCondition.signature?.data;
-      const signatureVRSHex = signatureVRS
-        ? Buffer.from(signatureVRS).toString("hex")
-        : "N/A";
+      // Extract the signature from the serialized transaction
+      // For a standard transaction: version(1) + chainId(4) + authType(1) + hashMode(1) + signer(20) + nonce(8) + fee(8) + keyEncoding(1) = 44 bytes
+      // Signature is the next 65 bytes (VRS format: 1 byte recovery + 32 bytes r + 32 bytes s)
+      const signatureStartByte = 44;
+      const signatureEndByte = signatureStartByte + 65;
+      const signatureVRSHex = signedTxHex.substring(
+        signatureStartByte * 2,
+        signatureEndByte * 2
+      );
 
       console.log("Signed transaction hex:", signedTxHex);
       console.log("SignatureVRS (software):", signatureVRSHex);
 
-      // Verify signature
-      verifySigHash({ txHex: signedTxHex });
+      // Verify signature and add to history
+      let verified = true;
+      let errorMessage: string | undefined;
+      try {
+        verifySigHash({ txHex: signedTxHex });
+      } catch (verifyError) {
+        verified = false;
+        errorMessage = String(verifyError);
+        console.error("Verification failed:", verifyError);
+      }
 
-      setResult(
-        JSON.stringify(
-          {
+      setHistory((prev) => [
+        ...prev,
+        {
+          timestamp: new Date().toISOString(),
+          walletType: "software",
+          sponsored,
+          data: {
             publicKey,
             signatureVRS: signatureVRSHex,
             txHex: signedTxHex,
-            verified: true,
+            ...(errorMessage && { error: errorMessage }),
           },
-          null,
-          2
-        )
-      );
+          verified,
+        },
+      ]);
     } catch (error) {
       console.error("Software wallet error:", error);
       setError({
@@ -149,11 +179,10 @@ export default function App() {
         error: `Software wallet error: ${String(error)}`,
       });
     }
-  }, [mnemonic, sponsored, verifySigHash]);
+  }, [mnemonic, createUnsignedTransaction, verifySigHash]);
 
   const handleLedgerSign = useCallback(async () => {
     try {
-      setResult("");
       setError({ isError: false, error: "" });
 
       // Dynamically import TransportWebUSB to avoid Buffer issues at bundle time
@@ -184,15 +213,8 @@ export default function App() {
       const publicKeyString = addressResponse.publicKey.toString("hex");
       console.log("Ledger public key:", publicKeyString);
 
-      // Create unsigned transaction
-      const contractCall = await makeUnsignedContractCall({
-        sponsored,
-        contractAddress: "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE",
-        contractName: "send-many",
-        functionName: "send-many",
-        functionArgs: [],
-        publicKey: publicKeyString,
-      });
+      // Create unsigned transaction using shared helper
+      const contractCall = await createUnsignedTransaction(publicKeyString);
 
       const unsignedTxHex = contractCall.serialize();
 
@@ -225,22 +247,33 @@ export default function App() {
 
       console.log("Signed transaction hex:", signedTxHex);
 
-      // Verify signature
-      verifySigHash({ txHex: signedTxHex });
+      // Verify signature and add to history
+      let verified = true;
+      let errorMessage: string | undefined;
+      try {
+        verifySigHash({ txHex: signedTxHex });
+      } catch (verifyError) {
+        verified = false;
+        errorMessage = String(verifyError);
+        console.error("Verification failed:", verifyError);
+      }
 
-      setResult(
-        JSON.stringify(
-          {
+      setHistory((prev) => [
+        ...prev,
+        {
+          timestamp: new Date().toISOString(),
+          walletType: "ledger",
+          sponsored,
+          data: {
             publicKey: publicKeyString,
             address: addressResponse.address,
             signatureVRS: signatureVRSHex,
             txHex: signedTxHex,
-            verified: true,
+            ...(errorMessage && { error: errorMessage }),
           },
-          null,
-          2
-        )
-      );
+          verified,
+        },
+      ]);
 
       await transport.close();
     } catch (error) {
@@ -250,7 +283,7 @@ export default function App() {
         error: `Ledger error: ${String(error)}`,
       });
     }
-  }, [sponsored, verifySigHash]);
+  }, [createUnsignedTransaction, verifySigHash]);
 
   const handleGenerateMnemonic = useCallback(() => {
     const newMnemonic = generateMnemonic(wordlist, 256); // 24 words
@@ -368,26 +401,85 @@ export default function App() {
         </div>
       )}
 
-      {result && (
-        <div
-          style={{
-            marginTop: "20px",
-            padding: "10px",
-            backgroundColor: "#e8f5e9",
-            border: "1px solid #4caf50",
-          }}
-        >
-          <h3 style={{ color: "#2e7d32", margin: "0 0 10px 0" }}>Result</h3>
-          <pre
+      {history.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <div
             style={{
-              margin: 0,
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "10px",
             }}
           >
-            {result}
-          </pre>
+            <h3 style={{ margin: 0 }}>Transaction History</h3>
+            <button
+              onClick={() => setHistory([])}
+              style={{
+                padding: "5px 10px",
+                backgroundColor: "#f44336",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Clear History
+            </button>
+          </div>
+          {history
+            .slice()
+            .reverse()
+            .map((item, index) => (
+              <div
+                key={history.length - 1 - index}
+                style={{
+                  marginBottom: "20px",
+                  padding: "10px",
+                  backgroundColor: item.verified ? "#e8f5e9" : "#ffebee",
+                  border: item.verified
+                    ? "1px solid #4caf50"
+                    : "1px solid #f44336",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: item.verified ? "#2e7d32" : "#c62828" }}>
+                      {item.walletType === "software"
+                        ? "Software Wallet"
+                        : "Ledger Wallet"}
+                    </strong>
+                    {" • "}
+                    <span>{item.sponsored ? "Sponsored" : "Non-Sponsored"}</span>
+                    {" • "}
+                    <span style={{ fontSize: "0.9em", color: "#666" }}>
+                      {new Date(item.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <strong style={{ color: item.verified ? "#2e7d32" : "#c62828" }}>
+                      {item.verified ? "✓ Verified" : "✗ Failed"}
+                    </strong>
+                  </div>
+                </div>
+                <pre
+                  style={{
+                    margin: 0,
+                    overflow: "auto",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-all",
+                    fontSize: "12px",
+                  }}
+                >
+                  {JSON.stringify(item.data, null, 2)}
+                </pre>
+              </div>
+            ))}
         </div>
       )}
     </div>
