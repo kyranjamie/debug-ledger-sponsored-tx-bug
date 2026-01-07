@@ -115,7 +115,13 @@ export default function App() {
       const signedTx = signer.transaction;
       const signedTxHex = signedTx.serialize();
 
+      // Extract the signature from the signed transaction
+      const spendingCondition = signedTx.auth.spendingCondition as SingleSigSpendingCondition;
+      const signatureVRS = spendingCondition.signature?.data;
+      const signatureVRSHex = signatureVRS ? Buffer.from(signatureVRS).toString("hex") : "N/A";
+
       console.log("Signed transaction hex:", signedTxHex);
+      console.log("SignatureVRS (software):", signatureVRSHex);
 
       // Verify signature
       verifySigHash({ txHex: signedTxHex });
@@ -124,6 +130,7 @@ export default function App() {
         JSON.stringify(
           {
             publicKey,
+            signatureVRS: signatureVRSHex,
             txHex: signedTxHex,
             verified: true,
           },
@@ -195,16 +202,15 @@ export default function App() {
         throw new Error(`Failed to sign: ${signResponse.errorMessage}`);
       }
 
-      console.log("Signature from Ledger:", signResponse.signatureVRS);
-
       // The signatureVRS from Ledger is in format: [v (1 byte), r (32 bytes), s (32 bytes)]
       // Apply the signature to the transaction using the same approach as the user's implementation
       const signatureVRS = signResponse.signatureVRS;
+      const signatureVRSHex = signatureVRS.toString("hex");
+
+      console.log("SignatureVRS (Ledger):", signatureVRSHex);
 
       // Create the message signature from the Ledger signature
-      const messageSignature = createMessageSignature(
-        signatureVRS.toString("hex")
-      );
+      const messageSignature = createMessageSignature(signatureVRSHex);
 
       // Apply signature to the spending condition (similar to user's signStacksTransactionWithSignature)
       (
@@ -223,8 +229,8 @@ export default function App() {
           {
             publicKey: publicKeyString,
             address: addressResponse.address,
+            signatureVRS: signatureVRSHex,
             txHex: signedTxHex,
-            signature: signResponse.signatureVRS.toString("hex"),
             verified: true,
           },
           null,
